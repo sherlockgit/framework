@@ -3,6 +3,7 @@ package com.sherlock.framework.security.web;
 import com.sherlock.framework.security.AuthenticatedPrincipal;
 import com.sherlock.framework.security.PrincipalContext;
 import com.sherlock.framework.tenant.TenantId;
+import com.sherlock.framework.tenant.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.security.SecurityProperties;
@@ -24,6 +25,7 @@ class PrincipalContextFilterTest {
     @AfterEach
     void clearContexts() {
         PrincipalContext.clear();
+        TenantContext.clear();
         SecurityContextHolder.clearContext();
     }
 
@@ -38,6 +40,7 @@ class PrincipalContextFilterTest {
                 assertThat(PrincipalContext.require()).isEqualTo(principal));
 
         assertThat(PrincipalContext.current()).isEmpty();
+        assertThat(TenantContext.current()).isEmpty();
     }
 
     @Test
@@ -52,12 +55,14 @@ class PrincipalContextFilterTest {
                 new MockHttpServletResponse(),
                 (request, response) -> {
                     assertThat(PrincipalContext.require()).isEqualTo(principal);
+                    assertThat(TenantContext.require()).isEqualTo(principal.tenantId());
                     throw new IllegalStateException("boom");
                 }))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("boom");
 
         assertThat(PrincipalContext.current()).isEmpty();
+        assertThat(TenantContext.current()).isEmpty();
     }
 
     @Test

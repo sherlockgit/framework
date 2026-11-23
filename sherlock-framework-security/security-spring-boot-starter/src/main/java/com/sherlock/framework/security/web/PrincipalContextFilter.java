@@ -2,6 +2,7 @@ package com.sherlock.framework.security.web;
 
 import com.sherlock.framework.security.AuthenticatedPrincipal;
 import com.sherlock.framework.security.PrincipalContext;
+import com.sherlock.framework.tenant.TenantContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,15 +36,18 @@ public class PrincipalContextFilter extends OncePerRequestFilter implements Orde
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
         PrincipalContext.clear();
+        TenantContext.clear();
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated()
                     && authentication.getPrincipal() instanceof AuthenticatedPrincipal principal) {
                 PrincipalContext.set(principal);
+                TenantContext.set(principal.tenantId());
             } else if (authentication != null && authentication.isAuthenticated()
                     && authentication.getPrincipal() instanceof Jwt jwt) {
                 try {
                     PrincipalContext.set(principalFrom(jwt));
+                    TenantContext.set(PrincipalContext.require().tenantId());
                 } catch (RuntimeException exception) {
                     SecurityContextHolder.clearContext();
                     response.setHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
@@ -54,6 +58,7 @@ public class PrincipalContextFilter extends OncePerRequestFilter implements Orde
             filterChain.doFilter(request, response);
         } finally {
             PrincipalContext.clear();
+            TenantContext.clear();
         }
     }
 
