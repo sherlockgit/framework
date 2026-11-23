@@ -11,6 +11,8 @@ import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.core.Ordered;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -33,7 +35,12 @@ public class PrincipalContextFilter extends OncePerRequestFilter implements Orde
                 PrincipalContext.set(principal);
             } else if (authentication != null && authentication.isAuthenticated()
                     && authentication.getPrincipal() instanceof Jwt jwt) {
-                PrincipalContext.set(principalFrom(jwt));
+                try {
+                    PrincipalContext.set(principalFrom(jwt));
+                } catch (RuntimeException exception) {
+                    throw new OAuth2AuthenticationException(
+                            new OAuth2Error("invalid_token"), "JWT principal claims are invalid", exception);
+                }
             }
             filterChain.doFilter(request, response);
         } finally {
