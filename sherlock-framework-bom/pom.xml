@@ -16,13 +16,6 @@
 
     <name>Sherlock Framework BOM</name>
 
-    <properties>
-        <spring-boot.version>3.4.5</spring-boot.version>
-        <mybatis-plus.version>3.5.12</mybatis-plus.version>
-        <nimbus-jose-jwt.version>9.47</nimbus-jose-jwt.version>
-        <testcontainers.version>1.20.6</testcontainers.version>
-    </properties>
-
     <dependencyManagement>
         <dependencies>
             <dependency>
