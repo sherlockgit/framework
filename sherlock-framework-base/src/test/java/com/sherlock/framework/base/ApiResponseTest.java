@@ -18,6 +18,7 @@ class ApiResponseTest {
         assertThat(response.success()).isFalse();
         assertThat(response.code()).isEqualTo("AUTH-401-001");
         assertThat(response.message()).isEqualTo("认证已失效");
+        assertThat(response.data()).isNull();
         assertThat(response.traceId()).isEqualTo("trace-123");
     }
 
