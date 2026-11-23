@@ -104,8 +104,5 @@ public class SecurityAutoConfiguration {
         static final class JwkSetUriConfigured {
         }
 
-        @ConditionalOnProperty(prefix = "sherlock.security.jwt", name = "clock-skew")
-        static final class ClockSkewConfigured {
-        }
     }
 }

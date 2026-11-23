@@ -53,7 +53,7 @@ public final class StrictJwtValidator implements OAuth2TokenValidator<Jwt> {
                 positiveLong(jwt.getSubject(), "sub"),
                 new TenantId(positiveLongClaim(jwt, "tenant_id")),
                 permissions == null ? Set.of() : Set.copyOf(permissions),
-                positiveLongClaim(jwt, "policy_version"));
+                nonNegativeLongClaim(jwt, "policy_version"));
     }
 
     private void validateClaims(Jwt jwt) {
@@ -77,7 +77,7 @@ public final class StrictJwtValidator implements OAuth2TokenValidator<Jwt> {
 
         positiveLong(jwt.getSubject(), "sub");
         positiveLongClaim(jwt, "tenant_id");
-        positiveLongClaim(jwt, "policy_version");
+        nonNegativeLongClaim(jwt, "policy_version");
         requiredText(jwt.getId(), "jti");
     }
 
@@ -86,6 +86,15 @@ public final class StrictJwtValidator implements OAuth2TokenValidator<Jwt> {
         long parsed = exactLong(value, claimName);
         if (parsed <= 0) {
             throw new IllegalArgumentException(claimName + " must be positive");
+        }
+        return parsed;
+    }
+
+    private static long nonNegativeLongClaim(Jwt jwt, String claimName) {
+        Object value = jwt.getClaim(claimName);
+        long parsed = exactLong(value, claimName);
+        if (parsed < 0) {
+            throw new IllegalArgumentException(claimName + " must not be negative");
         }
         return parsed;
     }
@@ -114,9 +123,20 @@ public final class StrictJwtValidator implements OAuth2TokenValidator<Jwt> {
             }
         }
         if (value instanceof String text) {
-            return positiveLong(text, claimName);
+            return integerLong(text, claimName);
         }
         throw new IllegalArgumentException(claimName + " must be an integer");
+    }
+
+    private static long integerLong(String value, String claimName) {
+        if (value == null || !value.matches("-?(?:0|[1-9][0-9]*)")) {
+            throw new IllegalArgumentException(claimName + " must be an integer");
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(claimName + " is out of range", exception);
+        }
     }
 
     private static String requiredText(String value, String claimName) {

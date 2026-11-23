@@ -3,7 +3,6 @@ package com.sherlock.framework.security.autoconfigure;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.net.URI;
-import java.time.Duration;
 
 @ConfigurationProperties("sherlock.security.jwt")
 public class SecurityJwtProperties {
@@ -11,7 +10,6 @@ public class SecurityJwtProperties {
     private String issuer;
     private String audience;
     private URI jwkSetUri;
-    private Duration clockSkew = Duration.ZERO;
 
     public String getIssuer() {
         return issuer;
@@ -35,14 +33,6 @@ public class SecurityJwtProperties {
 
     public void setJwkSetUri(URI jwkSetUri) {
         this.jwkSetUri = jwkSetUri;
-    }
-
-    public Duration getClockSkew() {
-        return clockSkew;
-    }
-
-    public void setClockSkew(Duration clockSkew) {
-        this.clockSkew = clockSkew == null ? Duration.ZERO : clockSkew;
     }
 
     boolean hasIssuerAndAudience() {

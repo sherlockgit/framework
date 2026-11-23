@@ -56,6 +56,14 @@ class JwtResourceServerIntegrationTest {
     }
 
     @Test
+    void bearerJwtWithZeroPolicyVersionIsAccepted() throws Exception {
+        mockMvc.perform(get("/principal").header("Authorization", "Bearer "
+                        + token(TokenOptions.withPolicyVersion(0L))))
+                .andExpect(status().isOk())
+                .andExpect(content().string("7"));
+    }
+
+    @Test
     void bearerJwtPermissionsAreAvailableAsAuthoritiesWithoutScopePrefix() throws Exception {
         mockMvc.perform(get("/permission").header("Authorization", "Bearer " + token(TokenOptions.valid())))
                 .andExpect(status().isOk())
@@ -120,6 +128,16 @@ class JwtResourceServerIntegrationTest {
     @Test
     void bearerJwtWithInvalidPolicyVersionClaimIsRejectedWithUnauthorized() throws Exception {
         expectUnauthorized(token(TokenOptions.withPolicyVersion("not-a-number")));
+    }
+
+    @Test
+    void bearerJwtWithNegativePolicyVersionClaimIsRejectedWithUnauthorized() throws Exception {
+        expectUnauthorized(token(TokenOptions.withPolicyVersion(-1L)));
+    }
+
+    @Test
+    void bearerJwtWithFractionalPolicyVersionClaimIsRejectedWithUnauthorized() throws Exception {
+        expectUnauthorized(token(TokenOptions.withPolicyVersion(3.5)));
     }
 
     @Test
