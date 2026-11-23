@@ -12,6 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -20,11 +21,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -88,12 +91,29 @@ class FrameworkErrorHandlerMvcTest {
     }
 
     @Test
-    void responseStatusExceptionKeepsItsClientStatusAndSafeReason() throws Exception {
+    void responseStatusExceptionKeepsItsClientStatusWithoutExposingReason() throws Exception {
         mvc.perform(get("/test/not-found"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("HTTP-404-001"))
-                .andExpect(jsonPath("$.message").value("Requested resource was not found"))
+                .andExpect(jsonPath("$.message").value("Resource not found"))
+                .andExpect(jsonPath("$.code").value(not("SYS-500-001")))
+                .andExpect(content().string(not(containsString("sensitive internal diagnostic"))));
+    }
+
+    @Test
+    void responseStatusAnnotatedExceptionKeepsStatusFromItsSuperclass() throws Exception {
+        mvc.perform(get("/test/annotated-not-found"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("HTTP-404-001"))
                 .andExpect(jsonPath("$.code").value(not("SYS-500-001")));
+    }
+
+    @Test
+    void methodNotSupportedPreservesAllowHeader() throws Exception {
+        mvc.perform(post("/test/get-only"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string("Allow", "GET"))
+                .andExpect(jsonPath("$.code").value("HTTP-405-001"));
     }
 
     @Test
@@ -157,7 +177,17 @@ class FrameworkErrorHandlerMvcTest {
         @GetMapping("/test/not-found")
         String notFound() {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,
-                    "Requested resource was not found");
+                    "sensitive internal diagnostic");
+        }
+
+        @GetMapping("/test/annotated-not-found")
+        String annotatedNotFound() {
+            throw new ChildNotFoundException();
+        }
+
+        @GetMapping("/test/get-only")
+        String getOnly() {
+            return "available via GET";
         }
 
         @PostMapping("/test/payload")
@@ -167,6 +197,13 @@ class FrameworkErrorHandlerMvcTest {
     }
 
     record Payload(@NotBlank String name) {
+    }
+
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    static class ParentNotFoundException extends RuntimeException {
+    }
+
+    static class ChildNotFoundException extends ParentNotFoundException {
     }
 
 }

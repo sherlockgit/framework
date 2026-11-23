@@ -9,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +22,10 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.regex.Pattern;
 
 @RestControllerAdvice
 @Order(Ordered.LOWEST_PRECEDENCE)
@@ -35,7 +37,6 @@ public class FrameworkErrorHandler {
     private static final ErrorCode SYSTEM_ERROR = new ErrorCode("SYS-500-001", "System error");
     private static final ErrorCode MALFORMED_REQUEST = new ErrorCode("WEB-400-001", "Malformed request body");
     private static final ErrorCode INVALID_REQUEST = new ErrorCode("WEB-400-002", "Request validation failed");
-    private static final Pattern SAFE_CLIENT_REASON = Pattern.compile("[\\p{L}\\p{N} .,:;()/_-]{1,160}");
 
     private final TraceIdResolver traceIdResolver;
 
@@ -65,10 +66,7 @@ public class FrameworkErrorHandler {
     public ResponseEntity<ApiResponse<Void>> handleResponseStatusException(
             ResponseStatusException exception, HttpServletRequest request) {
         HttpStatusCode status = exception.getStatusCode();
-        String message = status.is4xxClientError()
-                ? safeClientReason(exception.getReason())
-                : "Request could not be processed";
-        return failure(status, new ErrorCode("HTTP-" + status.value() + "-001", message), request);
+        return failure(status, httpErrorCode(status), copyHeaders(exception.getHeaders()), request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -90,9 +88,15 @@ public class FrameworkErrorHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnknownException(Exception exception, HttpServletRequest request) {
-        if (exception instanceof ErrorResponse errorResponse && errorResponse.getStatusCode().is4xxClientError()) {
+        if (exception instanceof ErrorResponse errorResponse) {
             HttpStatusCode status = errorResponse.getStatusCode();
-            return failure(status, new ErrorCode("HTTP-" + status.value() + "-001", "Request could not be processed"), request);
+            return failure(status, httpErrorCode(status), copyHeaders(errorResponse.getHeaders()), request);
+        }
+        ResponseStatus responseStatus = AnnotatedElementUtils.findMergedAnnotation(
+                exception.getClass(), ResponseStatus.class);
+        if (responseStatus != null) {
+            HttpStatusCode status = responseStatus.code();
+            return failure(status, httpErrorCode(status), request);
         }
         String traceId = traceIdResolver.resolve(request);
         LOGGER.error("Unhandled request failure; traceId={}", traceId, exception);
@@ -104,16 +108,32 @@ public class FrameworkErrorHandler {
         return new FieldValidationError(fieldError.getField(), "Invalid value");
     }
 
-    private String safeClientReason(String reason) {
-        if (reason != null && SAFE_CLIENT_REASON.matcher(reason).matches()) {
-            return reason;
-        }
-        return "Request could not be processed";
+    private ErrorCode httpErrorCode(HttpStatusCode status) {
+        return new ErrorCode("HTTP-" + status.value() + "-001", messageFor(status));
+    }
+
+    private String messageFor(HttpStatusCode status) {
+        return switch (status.value()) {
+            case 400 -> "Invalid request parameters";
+            case 404 -> "Resource not found";
+            default -> "Request could not be processed";
+        };
+    }
+
+    private HttpHeaders copyHeaders(HttpHeaders source) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.addAll(source);
+        return headers;
     }
 
     private ResponseEntity<ApiResponse<Void>> failure(
             HttpStatusCode status, ErrorCode errorCode, HttpServletRequest request) {
-        return ResponseEntity.status(status).body(ApiResponse.failure(errorCode, traceIdResolver.resolve(request)));
+        return failure(status, errorCode, HttpHeaders.EMPTY, request);
+    }
+
+    private ResponseEntity<ApiResponse<Void>> failure(
+            HttpStatusCode status, ErrorCode errorCode, HttpHeaders headers, HttpServletRequest request) {
+        return new ResponseEntity<>(ApiResponse.failure(errorCode, traceIdResolver.resolve(request)), headers, status);
     }
 
     public record FieldValidationError(String field, String message) {
