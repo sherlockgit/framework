@@ -39,6 +39,16 @@ class ApiResponseTest {
     }
 
     @Test
+    void errorCodeRejectsNullDefaultMessage() {
+        assertThatIllegalArgumentException().isThrownBy(() -> new ErrorCode("AUTH-401-001", null));
+    }
+
+    @Test
+    void errorCodeRejectsBlankDefaultMessage() {
+        assertThatIllegalArgumentException().isThrownBy(() -> new ErrorCode("AUTH-401-001", "  "));
+    }
+
+    @Test
     void businessExceptionUsesErrorCodeDefaultMessage() {
         var code = new ErrorCode("ORDER-400-001", "订单状态错误");
         var exception = new BusinessException(code);
