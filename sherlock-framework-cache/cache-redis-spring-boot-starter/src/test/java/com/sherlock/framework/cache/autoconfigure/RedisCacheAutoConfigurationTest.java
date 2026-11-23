@@ -1,6 +1,7 @@
 package com.sherlock.framework.cache.autoconfigure;
 
 import com.sherlock.framework.cache.CachePort;
+import com.sherlock.framework.cache.redis.RedisCachePort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -19,6 +20,19 @@ class RedisCacheAutoConfigurationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(RedisCacheAutoConfiguration.class));
+
+    @Test
+    void providesRedisCachePortWhenRedisTemplateIsAvailable() {
+        contextRunner
+                .withUserConfiguration(RedisTemplateConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(RedisConnectionFactory.class)
+                            .hasSingleBean(StringRedisTemplate.class);
+                    assertThat(context).hasSingleBean(CachePort.class)
+                            .hasSingleBean(RedisCachePort.class);
+                    assertThat(context.getBean(CachePort.class)).isInstanceOf(RedisCachePort.class);
+                });
+    }
 
     @Test
     void userProvidedCachePortPreventsAutoConfiguration() {
@@ -52,6 +66,20 @@ class RedisCacheAutoConfigurationTest {
                 public void evict(String namespace, String resource) {
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RedisTemplateConfiguration {
+
+        @Bean
+        RedisConnectionFactory redisConnectionFactory() {
+            return mock(RedisConnectionFactory.class);
+        }
+
+        @Bean
+        StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
+            return new StringRedisTemplate(connectionFactory);
         }
     }
 }
