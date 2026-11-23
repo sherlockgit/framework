@@ -73,6 +73,18 @@ class JwtResourceServerIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void bearerJwtWithMissingSubjectIsRejectedWithUnauthorized() throws Exception {
+        mockMvc.perform(get("/principal").header("Authorization", "Bearer missing-subject-token"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void bearerJwtWithMissingPolicyVersionClaimIsRejectedWithUnauthorized() throws Exception {
+        mockMvc.perform(get("/principal").header("Authorization", "Bearer missing-policy-version-token"))
+                .andExpect(status().isUnauthorized());
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import({SecurityAutoConfiguration.class, PrincipalController.class, JwtDecoderConfiguration.class})
@@ -86,25 +98,32 @@ class JwtResourceServerIntegrationTest {
         JwtDecoder jwtDecoder() {
             return token -> jwt(
                     token,
-                    "invalid-subject-token".equals(token) ? "not-a-number" : "7",
+                    "invalid-subject-token".equals(token) ? "not-a-number" :
+                            "missing-subject-token".equals(token) ? null : "7",
                     "invalid-tenant-token".equals(token) ? "not-a-number" :
                             "missing-tenant-token".equals(token) ? null : 9L,
-                    "invalid-policy-version-token".equals(token) ? "not-a-number" : 3L,
+                    "invalid-policy-version-token".equals(token) ? "not-a-number" :
+                            "missing-policy-version-token".equals(token) ? null : 3L,
                     "no-permission-token".equals(token) ? List.of() : List.of("order:read"));
         }
 
         private Jwt jwt(String token, String subject, Object tenantId, Object policyVersion, List<String> permissions) {
             Jwt.Builder builder = Jwt.withTokenValue(token)
                     .header("alg", "RS256")
-                    .subject(subject)
                     .claim("permissions", permissions)
                     .claim("jti", "jti-1")
                     .issuedAt(Instant.parse("2026-11-23T00:00:00Z"))
                     .expiresAt(Instant.parse("2026-11-23T01:00:00Z"));
+            if (subject != null) {
+                builder.subject(subject);
+            }
             if (tenantId != null) {
                 builder.claim("tenant_id", tenantId);
             }
-            return builder.claim("policy_version", policyVersion).build();
+            if (policyVersion != null) {
+                builder.claim("policy_version", policyVersion);
+            }
+            return builder.build();
         }
     }
 
