@@ -4,16 +4,18 @@ import com.sherlock.framework.security.web.PrincipalContextFilter;
 import com.sherlock.framework.security.web.StrictJwtValidator;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.ConfigurationCondition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -50,30 +52,21 @@ public class SecurityAutoConfiguration {
     }
 
     @Bean
-    static BeanPostProcessor jwtDecoderValidatorConfigurer(ObjectProvider<SecurityJwtProperties> propertiesProvider) {
-        return new BeanPostProcessor() {
-            @Override
-            public Object postProcessAfterInitialization(Object bean, String beanName) {
-                if (bean instanceof NimbusJwtDecoder decoder) {
-                    SecurityJwtProperties properties = propertiesProvider.getIfAvailable();
-                    if (properties != null && properties.hasIssuerAndAudience()) {
-                        decoder.setJwtValidator(new StrictJwtValidator(properties.getIssuer(), properties.getAudience()));
-                    }
-                }
-                return bean;
-            }
-        };
-    }
-
-    @Bean
     @ConditionalOnMissingBean
-    JwtAuthenticationConverter jwtAuthenticationConverter() {
+    @ConditionalOnBean(StrictJwtValidator.class)
+    JwtAuthenticationConverter jwtAuthenticationConverter(StrictJwtValidator strictJwtValidator) {
         JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
         authoritiesConverter.setAuthoritiesClaimName("permissions");
         authoritiesConverter.setAuthorityPrefix("");
 
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            OAuth2TokenValidatorResult result = strictJwtValidator.validate(jwt);
+            if (result.hasErrors()) {
+                throw new OAuth2AuthenticationException(result.getErrors().iterator().next());
+            }
+            return authoritiesConverter.convert(jwt);
+        });
         return converter;
     }
 

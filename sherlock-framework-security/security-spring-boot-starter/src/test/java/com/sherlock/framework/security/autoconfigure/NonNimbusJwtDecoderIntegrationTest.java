@@ -9,6 +9,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
@@ -60,6 +64,27 @@ class NonNimbusJwtDecoderIntegrationTest {
         expectUnauthorized("missing-jti");
     }
 
+    @Test
+    void invalidClaimsAreRejectedBeforeAuthorizationEvenWhenPermissionsAreInsufficient() throws Exception {
+        expectUnauthorizedAtPermissionEndpoint("wrong-audience");
+        expectUnauthorizedAtPermissionEndpoint("fractional-tenant");
+        expectUnauthorizedAtPermissionEndpoint("future-not-before");
+        expectUnauthorizedAtPermissionEndpoint("missing-jti");
+    }
+
+    @Test
+    void validJwtWithRequiredPermissionIsAccepted() throws Exception {
+        mockMvc.perform(get("/permission").header("Authorization", "Bearer valid-write"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("allowed"));
+    }
+
+    @Test
+    void validJwtWithoutRequiredPermissionIsRejectedWithForbidden() throws Exception {
+        mockMvc.perform(get("/permission").header("Authorization", "Bearer valid"))
+                .andExpect(status().isForbidden());
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import({SecurityAutoConfiguration.class, PrincipalController.class, DecoderConfiguration.class})
@@ -73,6 +98,16 @@ class NonNimbusJwtDecoderIntegrationTest {
         JwtDecoder jwtDecoder() {
             return token -> jwt(token);
         }
+
+        @Bean
+        SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+            return http
+                    .authorizeHttpRequests(requests -> requests
+                            .requestMatchers("/permission").hasAuthority("order:write")
+                            .anyRequest().authenticated())
+                    .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
+                    .build();
+        }
     }
 
     @RestController
@@ -82,10 +117,21 @@ class NonNimbusJwtDecoderIntegrationTest {
         String principalId() {
             return Long.toString(PrincipalContext.require().userId());
         }
+
+        @GetMapping("/permission")
+        @PreAuthorize("hasAuthority('order:write')")
+        String permission() {
+            return "allowed";
+        }
     }
 
     private void expectUnauthorized(String token) throws Exception {
         mockMvc.perform(get("/principal").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private void expectUnauthorizedAtPermissionEndpoint(String token) throws Exception {
+        mockMvc.perform(get("/permission").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -97,7 +143,7 @@ class NonNimbusJwtDecoderIntegrationTest {
                 .audience(List.of("framework-api"))
                 .subject("7")
                 .claim("jti", "jti-1")
-                .claim("permissions", List.of("order:read"))
+                .claim("permissions", "valid-write".equals(token) ? List.of("order:write") : List.of("order:read"))
                 .claim("tenant_id", 9L)
                 .claim("policy_version", 3L)
                 .issuedAt(now)

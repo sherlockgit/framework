@@ -15,6 +15,7 @@ public class TenantContextCleanupFilter implements Filter, Ordered {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
             throws IOException, ServletException {
+        TenantContext.clear();
         try {
             filterChain.doFilter(request, response);
         } finally {

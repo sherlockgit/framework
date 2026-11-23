@@ -40,6 +40,18 @@ class TenantContextCleanupFilterTest {
     }
 
     @Test
+    void filterClearsExistingContextBeforeInvokingChain() throws Exception {
+        TenantContext.set(new TenantId(99L));
+
+        filter.doFilter(
+                new MockHttpServletRequest(),
+                new MockHttpServletResponse(),
+                (request, response) -> assertThat(TenantContext.current()).isEmpty());
+
+        assertThat(TenantContext.current()).isEmpty();
+    }
+
+    @Test
     void autoConfigurationRegistersFilterOnlyForServletWebApplications() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(TenantAutoConfiguration.class))
