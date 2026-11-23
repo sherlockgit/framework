@@ -184,6 +184,18 @@ class TenantAndDataScopeIntegrationTest {
     }
 
     @Test
+    void insertSetWithoutColumnsCannotWriteAnotherTenant() {
+        bind(1L, 101L, DataScope.allTenant());
+
+        assertThatThrownBy(() -> withMapper(mapper -> mapper.insertSetWithoutColumns(
+                2L, "forbidden-set", 101L, 10L, "forbidden")))
+                .hasRootCauseInstanceOf(com.sherlock.framework.base.error.BusinessException.class)
+                .hasRootCauseMessage("Tenant table inserts must declare target columns");
+
+        assertThat(rawName(2L, "forbidden-set")).isNull();
+    }
+
+    @Test
     void explicitTenantUpdateIsRejectedAndCannotMoveAnExistingRow() {
         bind(1L, 101L, DataScope.allTenant());
 
@@ -287,6 +299,17 @@ class TenantAndDataScopeIntegrationTest {
                 insert into orders select null, 2, #{businessKey}, #{creatorId}, #{departmentId}, #{name}
                 """)
         int insertSelectWithoutColumns(
+                @Param("businessKey") String businessKey,
+                @Param("creatorId") long creatorId,
+                @Param("departmentId") long departmentId,
+                @Param("name") String name);
+
+        @Insert("""
+                insert into orders set tenant_id = #{tenantId}, business_key = #{businessKey}, creator_id = #{creatorId},
+                department_id = #{departmentId}, name = #{name}
+                """)
+        int insertSetWithoutColumns(
+                @Param("tenantId") long tenantId,
                 @Param("businessKey") String businessKey,
                 @Param("creatorId") long creatorId,
                 @Param("departmentId") long departmentId,

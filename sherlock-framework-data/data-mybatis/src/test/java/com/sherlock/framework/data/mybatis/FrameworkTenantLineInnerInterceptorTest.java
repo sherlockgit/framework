@@ -20,11 +20,17 @@ class FrameworkTenantLineInnerInterceptorTest {
     }
 
     @Test
-    void rejectsExplicitTenantColumnInInsertSetAndDuplicateUpdate() {
+    void rejectsTenantTableInsertSetBeforeExaminingExplicitTenantColumn() {
         assertThatThrownBy(() -> interceptor.parserSingle(
                 "insert into orders set tenant_id = 2, business_key = 'forbidden'", null))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Explicit tenant_id writes are forbidden for tenant tables");
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Tenant table inserts must declare target columns")
+                .extracting(exception -> ((BusinessException) exception).errorCode().value())
+                .isEqualTo("DATA-400-001");
+    }
+
+    @Test
+    void rejectsExplicitTenantColumnInInsertDuplicateUpdate() {
         assertThatThrownBy(() -> interceptor.parserSingle(
                 "insert into orders (business_key) values ('forbidden') on duplicate key update tenant_id = 2", null))
                 .isInstanceOf(IllegalStateException.class)
@@ -52,9 +58,26 @@ class FrameworkTenantLineInnerInterceptorTest {
     }
 
     @Test
+    void rejectsTenantTableInsertSetWithoutAnExplicitColumnList() {
+        assertThatThrownBy(() -> interceptor.parserSingle(
+                "insert into orders set business_key = 'forbidden'", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Tenant table inserts must declare target columns")
+                .extracting(exception -> ((BusinessException) exception).errorCode().value())
+                .isEqualTo("DATA-400-001");
+    }
+
+    @Test
     void allowsGlobalTableInsertWithoutAnExplicitColumnList() {
         assertThatCode(() -> interceptor.parserSingle(
                 "insert into flyway_schema_history values (1, 'global')", null))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void allowsGlobalTableInsertSetWithoutAnExplicitColumnList() {
+        assertThatCode(() -> interceptor.parserSingle(
+                "insert into flyway_schema_history set installed_rank = 1, version = 'global'", null))
                 .doesNotThrowAnyException();
     }
 

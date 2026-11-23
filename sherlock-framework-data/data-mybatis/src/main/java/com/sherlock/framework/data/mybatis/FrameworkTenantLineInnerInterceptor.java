@@ -60,8 +60,7 @@ public final class FrameworkTenantLineInnerInterceptor extends TenantLineInnerIn
     }
 
     private boolean omitsTargetColumns(Insert insert) {
-        return (insert.getColumns() == null || insert.getColumns().isEmpty())
-                && (insert.getSetUpdateSets() == null || insert.getSetUpdateSets().isEmpty());
+        return insert.getColumns() == null || insert.getColumns().isEmpty();
     }
 
     private boolean containsTenantColumn(Iterable<Column> columns) {
