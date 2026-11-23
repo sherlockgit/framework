@@ -17,7 +17,7 @@ The tenant demo's end-to-end test starts MySQL 8 and Redis 7 containers and can 
 .\mvnw.cmd -pl examples/tenant-demo -am test "-Dtest=TenantIsolationE2ETest"
 ```
 
-Without Docker, the Testcontainers class is skipped while the demo's H2 application-context test continues to verify Flyway, MyBatis mapping, security filters, and controller wiring.
+Without Docker, the real MySQL and Redis Testcontainers end-to-end class is skipped. The demo's H2 test is only a supplementary application-context and Mapper regression: it verifies Flyway, bean wiring, and framework-injected tenant IDs for Mapper inserts. It does not validate HTTP behavior, JWT authentication, security filters, Redis, or end-to-end tenant isolation, and cannot replace the Docker-based MySQL and Redis acceptance test.
 
 ## Tenant Demo Acceptance
 
