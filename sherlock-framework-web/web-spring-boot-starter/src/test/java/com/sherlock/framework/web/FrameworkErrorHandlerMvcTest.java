@@ -2,28 +2,38 @@ package com.sherlock.framework.web;
 
 import com.sherlock.framework.base.error.BusinessException;
 import com.sherlock.framework.base.error.ErrorCode;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(classes = FrameworkErrorHandlerMvcTest.TestApplication.class)
-@AutoConfigureMockMvc(addFilters = false)
+@AutoConfigureMockMvc
 class FrameworkErrorHandlerMvcTest {
 
     @Autowired
@@ -36,6 +46,7 @@ class FrameworkErrorHandlerMvcTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("TENANT-400-001"))
                 .andExpect(jsonPath("$.traceId").value("trace-9"))
+                .andExpect(header().string("X-Trace-Id", "trace-9"))
                 .andExpect(jsonPath("$.stackTrace").doesNotExist());
     }
 
@@ -44,7 +55,9 @@ class FrameworkErrorHandlerMvcTest {
         mvc.perform(get("/test/business-error").header("X-Trace-Id", "bad trace id"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.traceId").value(matchesPattern("[A-Za-z0-9-]{1,64}")))
-                .andExpect(jsonPath("$.traceId").value(not("bad trace id")));
+                .andExpect(jsonPath("$.traceId").value(not("bad trace id")))
+                .andExpect(header().string("X-Trace-Id", matchesPattern("[A-Za-z0-9-]{1,64}")))
+                .andExpect(header().string("X-Trace-Id", not("bad trace id")));
     }
 
     @Test
@@ -74,10 +87,48 @@ class FrameworkErrorHandlerMvcTest {
                 .andExpect(content().string(not(org.hamcrest.Matchers.containsString("secret failure detail"))));
     }
 
+    @Test
+    void responseStatusExceptionKeepsItsClientStatusAndSafeReason() throws Exception {
+        mvc.perform(get("/test/not-found"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("HTTP-404-001"))
+                .andExpect(jsonPath("$.message").value("Requested resource was not found"))
+                .andExpect(jsonPath("$.code").value(not("SYS-500-001")));
+    }
+
+    @Test
+    void malformedJsonReturnsStableBadRequestResponse() throws Exception {
+        mvc.perform(post("/test/payload")
+                        .contentType("application/json")
+                        .content("{\"name\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("WEB-400-001"))
+                .andExpect(jsonPath("$.code").value(not("SYS-500-001")));
+    }
+
+    @Test
+    void invalidRequestBodyReturnsBadRequestWithSafeFieldErrors() throws Exception {
+        mvc.perform(post("/test/payload")
+                        .contentType("application/json")
+                        .content("{\"name\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("WEB-400-002"))
+                .andExpect(jsonPath("$.data[0].field").value("name"))
+                .andExpect(jsonPath("$.data[0].message").value("Invalid value"))
+                .andExpect(jsonPath("$.code").value(not("SYS-500-001")));
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import(ErrorController.class)
     static class TestApplication {
+
+        @Bean
+        SecurityFilterChain permitAllSecurityFilterChain(HttpSecurity http) throws Exception {
+            return http.csrf(csrf -> csrf.disable())
+                    .authorizeHttpRequests(requests -> requests.anyRequest().permitAll())
+                    .build();
+        }
     }
 
     @RestController
@@ -102,6 +153,20 @@ class FrameworkErrorHandlerMvcTest {
         String unknownError() {
             throw new IllegalStateException("secret failure detail");
         }
+
+        @GetMapping("/test/not-found")
+        String notFound() {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,
+                    "Requested resource was not found");
+        }
+
+        @PostMapping("/test/payload")
+        Payload payload(@Valid @RequestBody Payload payload) {
+            return payload;
+        }
+    }
+
+    record Payload(@NotBlank String name) {
     }
 
 }

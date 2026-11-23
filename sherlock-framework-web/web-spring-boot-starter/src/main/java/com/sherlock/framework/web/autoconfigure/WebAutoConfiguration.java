@@ -1,6 +1,7 @@
 package com.sherlock.framework.web.autoconfigure;
 
 import com.sherlock.framework.web.error.FrameworkErrorHandler;
+import com.sherlock.framework.web.trace.TraceIdFilter;
 import com.sherlock.framework.web.trace.TraceIdResolver;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -15,6 +16,12 @@ public class WebAutoConfiguration {
     @ConditionalOnMissingBean
     TraceIdResolver traceIdResolver() {
         return new TraceIdResolver();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    TraceIdFilter traceIdFilter(TraceIdResolver traceIdResolver) {
+        return new TraceIdFilter(traceIdResolver);
     }
 
     @Bean
