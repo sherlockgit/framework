@@ -2,7 +2,6 @@ package com.sherlock.framework.security.web;
 
 import com.sherlock.framework.security.AuthenticatedPrincipal;
 import com.sherlock.framework.security.PrincipalContext;
-import com.sherlock.framework.tenant.TenantId;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,10 +16,18 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Set;
 
 public class PrincipalContextFilter extends OncePerRequestFilter implements Ordered {
+
+    private final StrictJwtValidator jwtValidator;
+
+    public PrincipalContextFilter() {
+        this(null);
+    }
+
+    public PrincipalContextFilter(StrictJwtValidator jwtValidator) {
+        this.jwtValidator = jwtValidator;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -38,8 +45,10 @@ public class PrincipalContextFilter extends OncePerRequestFilter implements Orde
                 try {
                     PrincipalContext.set(principalFrom(jwt));
                 } catch (RuntimeException exception) {
-                    throw new OAuth2AuthenticationException(
-                            new OAuth2Error("invalid_token"), "JWT principal claims are invalid", exception);
+                    SecurityContextHolder.clearContext();
+                    response.setHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
                 }
             }
             filterChain.doFilter(request, response);
@@ -53,23 +62,10 @@ public class PrincipalContextFilter extends OncePerRequestFilter implements Orde
         return SecurityProperties.DEFAULT_FILTER_ORDER + 1;
     }
 
-    private static AuthenticatedPrincipal principalFrom(Jwt jwt) {
-        List<String> permissions = jwt.getClaimAsStringList("permissions");
-        return new AuthenticatedPrincipal(
-                Long.parseLong(jwt.getSubject()),
-                new TenantId(longClaim(jwt, "tenant_id")),
-                permissions == null ? Set.of() : Set.copyOf(permissions),
-                longClaim(jwt, "policy_version"));
-    }
-
-    private static long longClaim(Jwt jwt, String claimName) {
-        Object value = jwt.getClaim(claimName);
-        if (value instanceof Number number) {
-            return number.longValue();
+    private AuthenticatedPrincipal principalFrom(Jwt jwt) {
+        if (jwtValidator != null) {
+            return jwtValidator.validateAndCreatePrincipal(jwt);
         }
-        if (value instanceof String text) {
-            return Long.parseLong(text);
-        }
-        throw new IllegalArgumentException(claimName + " must be a number");
+        throw new OAuth2AuthenticationException(new OAuth2Error("invalid_token"), "JWT validation is not configured");
     }
 }

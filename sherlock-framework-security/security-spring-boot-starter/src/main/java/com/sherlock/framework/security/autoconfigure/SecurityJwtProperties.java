@@ -51,7 +51,7 @@ public class SecurityJwtProperties {
 
     void requireIssuerAndAudience() {
         if (!hasIssuerAndAudience()) {
-            throw new IllegalStateException("sherlock.security.jwt.issuer and audience are required with jwk-set-uri");
+            throw new IllegalStateException("sherlock.security.jwt.issuer and audience are required when JWT is configured");
         }
     }
 
