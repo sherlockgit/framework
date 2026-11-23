@@ -55,8 +55,72 @@ class DataAutoConfigurationTest {
         }
     }
 
+    @Test
+    void mappedDefaultTenantTableWithoutTenantIdColumnFailsAtStartup() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "default-orders-mapping");
+        assistant.setCurrentNamespace("default-orders-mapping");
+        TableInfoHelper.initTableInfo(assistant, DefaultOrderWithoutTenantId.class);
+
+        try {
+            contextRunner.run(context -> assertThat(context).hasFailed()
+                    .getFailure().hasMessageContaining("default_orders")
+                    .hasMessageContaining("tenant_id"));
+        } finally {
+            TableInfoHelper.remove(DefaultOrderWithoutTenantId.class);
+        }
+    }
+
+    @Test
+    void mappedDefaultTenantTableWithTenantIdColumnStarts() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "tenant-orders-mapping");
+        assistant.setCurrentNamespace("tenant-orders-mapping");
+        TableInfoHelper.initTableInfo(assistant, DefaultOrderWithTenantId.class);
+
+        try {
+            contextRunner.run(context -> assertThat(context).hasNotFailed());
+        } finally {
+            TableInfoHelper.remove(DefaultOrderWithTenantId.class);
+        }
+    }
+
+    @Test
+    void mappedExplicitGlobalTableWithoutTenantIdColumnStarts() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "global-orders-mapping");
+        assistant.setCurrentNamespace("global-orders-mapping");
+        TableInfoHelper.initTableInfo(assistant, GlobalOrderWithoutTenantId.class);
+
+        try {
+            contextRunner.withPropertyValues("sherlock.data.global-tables=global_orders")
+                    .run(context -> assertThat(context).hasNotFailed());
+        } finally {
+            TableInfoHelper.remove(GlobalOrderWithoutTenantId.class);
+        }
+    }
+
     @TableName("orders")
     static class OrderWithoutTenantId {
+        @TableId
+        private Long id;
+        private String name;
+    }
+
+    @TableName("default_orders")
+    static class DefaultOrderWithoutTenantId {
+        @TableId
+        private Long id;
+        private String name;
+    }
+
+    @TableName("tenant_orders")
+    static class DefaultOrderWithTenantId {
+        @TableId
+        private Long id;
+        private Long tenantId;
+        private String name;
+    }
+
+    @TableName("global_orders")
+    static class GlobalOrderWithoutTenantId {
         @TableId
         private Long id;
         private String name;

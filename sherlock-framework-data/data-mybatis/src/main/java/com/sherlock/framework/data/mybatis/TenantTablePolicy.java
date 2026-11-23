@@ -37,6 +37,11 @@ public final class TenantTablePolicy {
         Objects.requireNonNull(tableInfos, "tableInfos must not be null");
         Map<String, TableInfo> mappings = tableInfos.stream()
                 .collect(Collectors.toMap(tableInfo -> normalize(tableInfo.getTableName()), Function.identity(), (left, right) -> left));
+        for (Map.Entry<String, TableInfo> mapping : mappings.entrySet()) {
+            if (isTenantTable(mapping.getKey()) && !hasTenantIdColumn(mapping.getValue())) {
+                throw new IllegalStateException("Tenant table '" + mapping.getKey() + "' must map tenant_id");
+            }
+        }
         for (String tableName : declaredTenantTables) {
             TableInfo tableInfo = mappings.get(tableName);
             if (tableInfo == null || !hasTenantIdColumn(tableInfo)) {
