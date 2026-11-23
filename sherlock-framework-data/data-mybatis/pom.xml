@@ -6,6 +6,11 @@
     <dependencies>
         <dependency>
             <groupId>com.sherlock.framework</groupId>
+            <artifactId>sherlock-framework-base</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sherlock.framework</groupId>
             <artifactId>sherlock-framework-data-scope-api</artifactId>
             <version>${project.version}</version>
         </dependency>

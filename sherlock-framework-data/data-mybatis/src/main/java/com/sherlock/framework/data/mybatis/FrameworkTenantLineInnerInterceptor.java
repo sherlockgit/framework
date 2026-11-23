@@ -1,6 +1,8 @@
 package com.sherlock.framework.data.mybatis;
 
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
+import com.sherlock.framework.base.error.BusinessException;
+import com.sherlock.framework.base.error.ErrorCode;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.insert.Insert;
 import net.sf.jsqlparser.statement.update.Update;
@@ -15,6 +17,8 @@ public final class FrameworkTenantLineInnerInterceptor extends TenantLineInnerIn
 
     private static final String EXPLICIT_TENANT_WRITE_MESSAGE =
             "Explicit tenant_id writes are forbidden for tenant tables";
+    private static final ErrorCode MISSING_INSERT_COLUMN_LIST = new ErrorCode(
+            "DATA-400-001", "Tenant table inserts must declare target columns");
 
     private final TenantTablePolicy tablePolicy;
 
@@ -25,10 +29,15 @@ public final class FrameworkTenantLineInnerInterceptor extends TenantLineInnerIn
 
     @Override
     protected void processInsert(Insert insert, int index, String sql, Object object) {
-        if (isManagedTenantTable(insert.getTable().getName()) && (containsTenantColumn(insert.getColumns())
-                || containsTenantColumn(insert.getSetUpdateSets())
-                || containsTenantColumn(insert.getDuplicateUpdateSets()))) {
-            throw new IllegalStateException(EXPLICIT_TENANT_WRITE_MESSAGE);
+        if (isManagedTenantTable(insert.getTable().getName())) {
+            if (omitsTargetColumns(insert)) {
+                throw new BusinessException(MISSING_INSERT_COLUMN_LIST);
+            }
+            if (containsTenantColumn(insert.getColumns())
+                    || containsTenantColumn(insert.getSetUpdateSets())
+                    || containsTenantColumn(insert.getDuplicateUpdateSets())) {
+                throw new IllegalStateException(EXPLICIT_TENANT_WRITE_MESSAGE);
+            }
         }
         super.processInsert(insert, index, sql, object);
     }
@@ -44,6 +53,15 @@ public final class FrameworkTenantLineInnerInterceptor extends TenantLineInnerIn
 
     private boolean isManagedTenantTable(String tableName) {
         return tablePolicy.isTenantTable(tableName);
+    }
+
+    public TenantTablePolicy tablePolicy() {
+        return tablePolicy;
+    }
+
+    private boolean omitsTargetColumns(Insert insert) {
+        return (insert.getColumns() == null || insert.getColumns().isEmpty())
+                && (insert.getSetUpdateSets() == null || insert.getSetUpdateSets().isEmpty());
     }
 
     private boolean containsTenantColumn(Iterable<Column> columns) {

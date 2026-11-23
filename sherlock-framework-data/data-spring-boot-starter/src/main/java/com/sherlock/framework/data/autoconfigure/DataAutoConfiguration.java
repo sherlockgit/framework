@@ -66,10 +66,15 @@ public class DataAutoConfiguration {
             throw new IllegalStateException(
                     "A MybatisPlusInterceptor must contain exactly one TenantLineInnerInterceptor");
         }
-        if (!tenantInterceptors.isEmpty()
-                && !(tenantInterceptors.getFirst() instanceof FrameworkTenantLineInnerInterceptor)) {
-            throw new IllegalStateException(
-                    "A MybatisPlusInterceptor already contains a TenantLineInnerInterceptor that is not framework-managed");
+        if (!tenantInterceptors.isEmpty()) {
+            if (!(tenantInterceptors.getFirst() instanceof FrameworkTenantLineInnerInterceptor tenantInterceptor)) {
+                throw new IllegalStateException(
+                        "A MybatisPlusInterceptor already contains a TenantLineInnerInterceptor that is not framework-managed");
+            }
+            if (tenantInterceptor.tablePolicy() != tablePolicy) {
+                throw new IllegalStateException(
+                        "A framework-managed TenantLineInnerInterceptor must use the current TenantTablePolicy");
+            }
         }
 
         List<DataPermissionInterceptor> dataPermissionInterceptors = innerInterceptors.stream()
@@ -80,11 +85,16 @@ public class DataAutoConfiguration {
             throw new IllegalStateException(
                     "A MybatisPlusInterceptor must contain exactly one DataPermissionInterceptor");
         }
-        if (!dataPermissionInterceptors.isEmpty()
-                && !(dataPermissionInterceptors.getFirst().getDataPermissionHandler()
-                instanceof FrameworkDataPermissionHandler)) {
-            throw new IllegalStateException(
-                    "A MybatisPlusInterceptor already contains a DataPermissionInterceptor that is not framework-managed");
+        if (!dataPermissionInterceptors.isEmpty()) {
+            if (!(dataPermissionInterceptors.getFirst().getDataPermissionHandler()
+                    instanceof FrameworkDataPermissionHandler dataPermissionHandler)) {
+                throw new IllegalStateException(
+                        "A MybatisPlusInterceptor already contains a DataPermissionInterceptor that is not framework-managed");
+            }
+            if (dataPermissionHandler.tablePolicy() != tablePolicy) {
+                throw new IllegalStateException(
+                        "A framework-managed DataPermissionInterceptor must use the current TenantTablePolicy");
+            }
         }
 
         List<InnerInterceptor> paginationInterceptors = innerInterceptors.stream()

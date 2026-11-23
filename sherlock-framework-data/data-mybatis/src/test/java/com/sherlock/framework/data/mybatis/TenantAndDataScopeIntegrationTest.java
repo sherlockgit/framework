@@ -160,6 +160,30 @@ class TenantAndDataScopeIntegrationTest {
     }
 
     @Test
+    void insertValuesWithoutColumnsCannotWriteAnotherTenant() {
+        bind(1L, 101L, DataScope.allTenant());
+
+        assertThatThrownBy(() -> withMapper(mapper -> mapper.insertValuesWithoutColumns(
+                "forbidden-values", 101L, 10L, "forbidden")))
+                .hasRootCauseInstanceOf(com.sherlock.framework.base.error.BusinessException.class)
+                .hasRootCauseMessage("Tenant table inserts must declare target columns");
+
+        assertThat(rawName(2L, "forbidden-values")).isNull();
+    }
+
+    @Test
+    void insertSelectWithoutColumnsCannotWriteAnotherTenant() {
+        bind(1L, 101L, DataScope.allTenant());
+
+        assertThatThrownBy(() -> withMapper(mapper -> mapper.insertSelectWithoutColumns(
+                "forbidden-select", 101L, 10L, "forbidden")))
+                .hasRootCauseInstanceOf(com.sherlock.framework.base.error.BusinessException.class)
+                .hasRootCauseMessage("Tenant table inserts must declare target columns");
+
+        assertThat(rawName(2L, "forbidden-select")).isNull();
+    }
+
+    @Test
     void explicitTenantUpdateIsRejectedAndCannotMoveAnExistingRow() {
         bind(1L, 101L, DataScope.allTenant());
 
@@ -245,6 +269,24 @@ class TenantAndDataScopeIntegrationTest {
                 """)
         int insertWithTenant(
                 @Param("tenantId") long tenantId,
+                @Param("businessKey") String businessKey,
+                @Param("creatorId") long creatorId,
+                @Param("departmentId") long departmentId,
+                @Param("name") String name);
+
+        @Insert("""
+                insert into orders values (null, 2, #{businessKey}, #{creatorId}, #{departmentId}, #{name})
+                """)
+        int insertValuesWithoutColumns(
+                @Param("businessKey") String businessKey,
+                @Param("creatorId") long creatorId,
+                @Param("departmentId") long departmentId,
+                @Param("name") String name);
+
+        @Insert("""
+                insert into orders select null, 2, #{businessKey}, #{creatorId}, #{departmentId}, #{name}
+                """)
+        int insertSelectWithoutColumns(
                 @Param("businessKey") String businessKey,
                 @Param("creatorId") long creatorId,
                 @Param("departmentId") long departmentId,

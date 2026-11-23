@@ -98,8 +98,9 @@ class DataAutoConfigurationTest {
 
     @Test
     void doesNotDuplicateExistingFrameworkIsolationInterceptors() {
-        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
-                    TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+        TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+        contextRunner.withBean(TenantTablePolicy.class, () -> tablePolicy)
+                .withBean(MybatisPlusInterceptor.class, () -> {
                     MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
                     interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
                     interceptor.addInnerInterceptor(new com.baomidou.mybatisplus.extension.plugins.inner.DataPermissionInterceptor(
@@ -115,8 +116,9 @@ class DataAutoConfigurationTest {
 
     @Test
     void movesExistingFrameworkIsolationInterceptorsBeforePagination() {
-        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
-                    TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+        TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+        contextRunner.withBean(TenantTablePolicy.class, () -> tablePolicy)
+                .withBean(MybatisPlusInterceptor.class, () -> {
                     MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
                     interceptor.addInnerInterceptor(new PaginationInnerInterceptor());
                     interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
@@ -130,6 +132,29 @@ class DataAutoConfigurationTest {
                     assertThat(interceptors.get(1)).isInstanceOf(DataPermissionInterceptor.class);
                     assertThat(interceptors.get(2)).isInstanceOf(PaginationInnerInterceptor.class);
                 });
+    }
+
+    @Test
+    void failsFastWhenExistingFrameworkTenantInterceptorUsesAnotherPolicy() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(TenantTablePolicy.defaults()));
+                    return interceptor;
+                })
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure().hasMessageContaining("TenantTablePolicy"));
+    }
+
+    @Test
+    void failsFastWhenExistingFrameworkDataPermissionInterceptorUsesAnotherPolicy() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new DataPermissionInterceptor(
+                            new FrameworkDataPermissionHandler(TenantTablePolicy.defaults())));
+                    return interceptor;
+                })
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure().hasMessageContaining("TenantTablePolicy"));
     }
 
     @Test

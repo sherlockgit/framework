@@ -23,6 +23,10 @@ public final class FrameworkDataPermissionHandler implements MultiDataPermission
         this.tablePolicy = Objects.requireNonNull(tablePolicy, "tablePolicy must not be null");
     }
 
+    public TenantTablePolicy tablePolicy() {
+        return tablePolicy;
+    }
+
     @Override
     public Expression getSqlSegment(Expression where, String mappedStatementId) {
         return dataScopeExpression(null);
