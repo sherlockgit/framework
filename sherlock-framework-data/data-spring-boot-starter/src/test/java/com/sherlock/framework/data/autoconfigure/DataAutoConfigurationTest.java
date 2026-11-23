@@ -5,6 +5,17 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
+import com.baomidou.mybatisplus.extension.plugins.handler.DataPermissionHandler;
+import com.baomidou.mybatisplus.extension.plugins.inner.DataPermissionInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
+import com.sherlock.framework.data.mybatis.FrameworkDataPermissionHandler;
+import com.sherlock.framework.data.mybatis.FrameworkTenantLineInnerInterceptor;
+import com.sherlock.framework.data.mybatis.TenantTablePolicy;
+import com.sherlock.framework.data.web.DataScopeContextCleanupFilter;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.LongValue;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -29,6 +40,120 @@ class DataAutoConfigurationTest {
     void addsIsolationInterceptorsToAnExistingMybatisPlusInterceptor() {
         contextRunner.withBean(MybatisPlusInterceptor.class, MybatisPlusInterceptor::new)
                 .run(context -> assertThat(context.getBean(MybatisPlusInterceptor.class).getInterceptors()).hasSize(2));
+    }
+
+    @Test
+    void addsIsolationInterceptorsBeforePagination() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new PaginationInnerInterceptor());
+                    return interceptor;
+                })
+                .run(context -> {
+                    var interceptors = context.getBean(MybatisPlusInterceptor.class).getInterceptors();
+                    assertThat(interceptors).hasSize(3);
+                    assertThat(interceptors.get(0)).isInstanceOf(TenantLineInnerInterceptor.class);
+                    assertThat(interceptors.get(1)).isInstanceOf(
+                            com.baomidou.mybatisplus.extension.plugins.inner.DataPermissionInterceptor.class);
+                    assertThat(interceptors.get(2)).isInstanceOf(PaginationInnerInterceptor.class);
+                });
+    }
+
+    @Test
+    void failsFastWhenExistingTenantInterceptorUsesAnotherHandler() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(new TenantLineHandler() {
+                        @Override
+                        public Expression getTenantId() {
+                            return new LongValue(1L);
+                        }
+
+                        @Override
+                        public boolean ignoreTable(String tableName) {
+                            return false;
+                        }
+                    }));
+                    return interceptor;
+                })
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure().hasMessageContaining("TenantLineInnerInterceptor"));
+    }
+
+    @Test
+    void failsFastWhenExistingDataPermissionInterceptorUsesAnotherHandler() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new DataPermissionInterceptor(new DataPermissionHandler() {
+                        @Override
+                        public Expression getSqlSegment(Expression where, String mappedStatementId) {
+                            return null;
+                        }
+                    }));
+                    return interceptor;
+                })
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure().hasMessageContaining("DataPermissionInterceptor"));
+    }
+
+    @Test
+    void doesNotDuplicateExistingFrameworkIsolationInterceptors() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
+                    interceptor.addInnerInterceptor(new com.baomidou.mybatisplus.extension.plugins.inner.DataPermissionInterceptor(
+                            new FrameworkDataPermissionHandler(tablePolicy)));
+                    return interceptor;
+                })
+                .run(context -> assertThat(context).hasNotFailed()
+                        .getBean(MybatisPlusInterceptor.class)
+                        .extracting(MybatisPlusInterceptor::getInterceptors)
+                        .asList()
+                        .hasSize(2));
+    }
+
+    @Test
+    void movesExistingFrameworkIsolationInterceptorsBeforePagination() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new PaginationInnerInterceptor());
+                    interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
+                    interceptor.addInnerInterceptor(new DataPermissionInterceptor(
+                            new FrameworkDataPermissionHandler(tablePolicy)));
+                    return interceptor;
+                })
+                .run(context -> {
+                    var interceptors = context.getBean(MybatisPlusInterceptor.class).getInterceptors();
+                    assertThat(interceptors.get(0)).isInstanceOf(TenantLineInnerInterceptor.class);
+                    assertThat(interceptors.get(1)).isInstanceOf(DataPermissionInterceptor.class);
+                    assertThat(interceptors.get(2)).isInstanceOf(PaginationInnerInterceptor.class);
+                });
+    }
+
+    @Test
+    void failsFastWhenFrameworkTenantInterceptorIsDuplicated() {
+        contextRunner.withBean(MybatisPlusInterceptor.class, () -> {
+                    TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
+                    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+                    interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
+                    interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
+                    return interceptor;
+                })
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure().hasMessageContaining("exactly one TenantLineInnerInterceptor"));
+    }
+
+    @Test
+    void registersDataScopeCleanupFilterOnlyForServletWebApplications() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(DataAutoConfiguration.class))
+                .run(context -> assertThat(context).doesNotHaveBean(DataScopeContextCleanupFilter.class));
+
+        new org.springframework.boot.test.context.runner.WebApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(DataAutoConfiguration.class))
+                .run(context -> assertThat(context).hasSingleBean(DataScopeContextCleanupFilter.class));
     }
 
     @Test

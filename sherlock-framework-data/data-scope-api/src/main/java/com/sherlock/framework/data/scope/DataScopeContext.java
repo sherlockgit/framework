@@ -25,4 +25,29 @@ public final class DataScopeContext {
     public static void clear() {
         CURRENT_SCOPE.remove();
     }
+
+    /**
+     * Captures the current scope for explicit propagation to an asynchronous or message-handling task.
+     */
+    public static Optional<DataScope> snapshot() {
+        return current();
+    }
+
+    /**
+     * Runs work with an explicitly captured scope and restores the worker's previous scope afterward.
+     */
+    public static void executeWith(Optional<DataScope> snapshot, Runnable task) {
+        Objects.requireNonNull(snapshot, "snapshot must not be null");
+        Objects.requireNonNull(task, "task must not be null");
+
+        Optional<DataScope> previous = current();
+        clear();
+        snapshot.ifPresent(DataScopeContext::set);
+        try {
+            task.run();
+        } finally {
+            clear();
+            previous.ifPresent(DataScopeContext::set);
+        }
+    }
 }

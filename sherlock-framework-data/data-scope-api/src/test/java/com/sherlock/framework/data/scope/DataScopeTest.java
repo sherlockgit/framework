@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -82,5 +83,31 @@ class DataScopeTest {
         resolver.resolveAndBind();
 
         assertThat(DataScopeContext.require()).isEqualTo(expected);
+    }
+
+    @Test
+    void snapshotAndExecuteWithTransferScopeWithoutLeakingIntoWorkerThread() {
+        DataScope capturedScope = DataScope.departments(Set.of(10L));
+        DataScope workerScope = DataScope.departments(Set.of(99L));
+        DataScopeContext.set(capturedScope);
+
+        Optional<DataScope> snapshot = DataScopeContext.snapshot();
+        DataScopeContext.set(workerScope);
+
+        DataScopeContext.executeWith(snapshot, () -> assertThat(DataScopeContext.require()).isEqualTo(capturedScope));
+
+        assertThat(DataScopeContext.require()).isEqualTo(workerScope);
+    }
+
+    @Test
+    void executeWithRestoresWorkerScopeWhenTheTaskFails() {
+        DataScope workerScope = DataScope.departments(Set.of(99L));
+        DataScopeContext.set(workerScope);
+
+        assertThatThrownBy(() -> DataScopeContext.executeWith(Optional.of(DataScope.self()), () -> {
+            throw new IllegalStateException("boom");
+        })).isInstanceOf(IllegalStateException.class).hasMessage("boom");
+
+        assertThat(DataScopeContext.require()).isEqualTo(workerScope);
     }
 }

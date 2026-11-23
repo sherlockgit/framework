@@ -3,7 +3,6 @@ package com.sherlock.framework.data.mybatis;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.DataPermissionInterceptor;
-import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
 import com.sherlock.framework.data.scope.DataScope;
 import com.sherlock.framework.data.scope.DataScopeContext;
 import com.sherlock.framework.security.AuthenticatedPrincipal;
@@ -11,6 +10,7 @@ import com.sherlock.framework.security.PrincipalContext;
 import com.sherlock.framework.tenant.TenantContext;
 import com.sherlock.framework.tenant.TenantId;
 import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -146,10 +147,34 @@ class TenantAndDataScopeIntegrationTest {
         assertThat(rawName(1L, "self-order")).isEqualTo("self-order");
     }
 
+    @Test
+    void explicitCrossTenantInsertIsRejectedBeforeWritingTheRow() {
+        bind(1L, 101L, DataScope.allTenant());
+
+        assertThatThrownBy(() -> withMapper(mapper -> mapper.insertWithTenant(
+                2L, "forbidden-insert", 101L, 10L, "forbidden")))
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("Explicit tenant_id writes are forbidden for tenant tables");
+
+        assertThat(rawName(2L, "forbidden-insert")).isNull();
+    }
+
+    @Test
+    void explicitTenantUpdateIsRejectedAndCannotMoveAnExistingRow() {
+        bind(1L, 101L, DataScope.allTenant());
+
+        assertThatThrownBy(() -> withMapper(mapper -> mapper.updateTenantByBusinessKey("self-order", 2L)))
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("Explicit tenant_id writes are forbidden for tenant tables");
+
+        assertThat(rawName(1L, "self-order")).isEqualTo("self-order");
+        assertThat(rawName(2L, "self-order")).isNull();
+    }
+
     private MybatisPlusInterceptor interceptor() {
         TenantTablePolicy tablePolicy = TenantTablePolicy.defaults();
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(new FrameworkTenantLineHandler(tablePolicy)));
+        interceptor.addInnerInterceptor(new FrameworkTenantLineInnerInterceptor(tablePolicy));
         interceptor.addInnerInterceptor(new DataPermissionInterceptor(new FrameworkDataPermissionHandler(tablePolicy)));
         return interceptor;
     }
@@ -213,6 +238,20 @@ class TenantAndDataScopeIntegrationTest {
 
         @Delete("delete from orders where business_key = #{businessKey}")
         int deleteByBusinessKey(@Param("businessKey") String businessKey);
+
+        @Insert("""
+                insert into orders (tenant_id, business_key, creator_id, department_id, name)
+                values (#{tenantId}, #{businessKey}, #{creatorId}, #{departmentId}, #{name})
+                """)
+        int insertWithTenant(
+                @Param("tenantId") long tenantId,
+                @Param("businessKey") String businessKey,
+                @Param("creatorId") long creatorId,
+                @Param("departmentId") long departmentId,
+                @Param("name") String name);
+
+        @Update("update orders set tenant_id = #{tenantId} where business_key = #{businessKey}")
+        int updateTenantByBusinessKey(@Param("businessKey") String businessKey, @Param("tenantId") long tenantId);
     }
 
     record OrderRow(long id, long tenantId, String businessKey, long creatorId, long departmentId, String name) {
