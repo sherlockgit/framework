@@ -85,6 +85,15 @@ class NimbusJwtTokenServiceTest {
                 .isInstanceOf(SecurityException.class);
     }
 
+    @Test
+    void tokenWithFutureNotBeforeTimeIsRejected() throws Exception {
+        NimbusJwtTokenService service = serviceAt(NOW, "framework", "framework-api");
+        String token = tokenWithNotBefore(NOW.plusSeconds(60));
+
+        assertThatThrownBy(() -> service.verify(token))
+                .isInstanceOf(SecurityException.class);
+    }
+
     private NimbusJwtTokenService serviceAt(Instant instant, String issuer, String audience) {
         return new NimbusJwtTokenService(
                 (RSAPrivateKey) keyPair.getPrivate(),
@@ -92,5 +101,23 @@ class NimbusJwtTokenServiceTest {
                 issuer,
                 audience,
                 Clock.fixed(instant, ZoneOffset.UTC));
+    }
+
+    private String tokenWithNotBefore(Instant notBefore) throws Exception {
+        com.nimbusds.jwt.JWTClaimsSet claims = new com.nimbusds.jwt.JWTClaimsSet.Builder()
+                .subject("7")
+                .issuer("framework")
+                .audience("framework-api")
+                .jwtID("jti-1")
+                .claim("tenant_id", 9L)
+                .claim("permissions", Set.of("order:read"))
+                .claim("policy_version", 3L)
+                .notBeforeTime(java.util.Date.from(notBefore))
+                .expirationTime(java.util.Date.from(NOW.plusSeconds(300)))
+                .build();
+        com.nimbusds.jwt.SignedJWT signedJwt = new com.nimbusds.jwt.SignedJWT(
+                new com.nimbusds.jose.JWSHeader.Builder(com.nimbusds.jose.JWSAlgorithm.RS256).build(), claims);
+        signedJwt.sign(new com.nimbusds.jose.crypto.RSASSASigner((RSAPrivateKey) keyPair.getPrivate()));
+        return signedJwt.serialize();
     }
 }

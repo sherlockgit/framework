@@ -24,6 +24,7 @@ public final class NimbusJwtTokenService implements JwtTokenService {
     private static final String TENANT_ID_CLAIM = "tenant_id";
     private static final String PERMISSIONS_CLAIM = "permissions";
     private static final String POLICY_VERSION_CLAIM = "policy_version";
+    private static final Duration CLOCK_SKEW = Duration.ZERO;
 
     private final RSAPrivateKey signingKey;
     private final RSAPublicKey verificationKey;
@@ -107,8 +108,13 @@ public final class NimbusJwtTokenService implements JwtTokenService {
             throw new SecurityException("JWT audience is invalid");
         }
         Date expirationTime = claims.getExpirationTime();
-        if (expirationTime == null || !expirationTime.toInstant().isAfter(clock.instant())) {
+        Instant now = clock.instant();
+        if (expirationTime == null || !expirationTime.toInstant().plus(CLOCK_SKEW).isAfter(now)) {
             throw new SecurityException("JWT is expired");
+        }
+        Date notBeforeTime = claims.getNotBeforeTime();
+        if (notBeforeTime != null && notBeforeTime.toInstant().minus(CLOCK_SKEW).isAfter(now)) {
+            throw new SecurityException("JWT is not active yet");
         }
     }
 
