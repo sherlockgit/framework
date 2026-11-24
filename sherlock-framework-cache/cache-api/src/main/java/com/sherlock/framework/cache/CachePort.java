@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * Tenant-aware cache operations using UTF-8 string values rather than Java object serialization.
+ * 面向租户的缓存操作，使用 UTF-8 字符串值，避免 Java 对象序列化。
  */
 public interface CachePort {
 

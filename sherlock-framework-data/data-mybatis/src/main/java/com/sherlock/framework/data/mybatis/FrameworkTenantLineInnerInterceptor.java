@@ -11,7 +11,7 @@ import net.sf.jsqlparser.statement.update.UpdateSet;
 import java.util.Collection;
 
 /**
- * Keeps tenant ownership immutable for framework-managed tenant tables.
+ * 保证框架管理的租户表其租户归属不可被修改。
  */
 public final class FrameworkTenantLineInnerInterceptor extends TenantLineInnerInterceptor {
 

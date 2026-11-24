@@ -27,14 +27,14 @@ public final class DataScopeContext {
     }
 
     /**
-     * Captures the current scope for explicit propagation to an asynchronous or message-handling task.
+     * 捕获当前数据范围，用于显式传播至异步或消息处理任务。
      */
     public static Optional<DataScope> snapshot() {
         return current();
     }
 
     /**
-     * Runs work with an explicitly captured scope and restores the worker's previous scope afterward.
+     * 使用显式捕获的数据范围执行任务，并在结束后恢复工作线程原有的数据范围。
      */
     public static void executeWith(Optional<DataScope> snapshot, Runnable task) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");

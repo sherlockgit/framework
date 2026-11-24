@@ -3,7 +3,7 @@ package com.sherlock.framework.cache;
 import java.util.Objects;
 
 /**
- * A structured cache key whose individual segments are safe to join with a colon.
+ * 结构化缓存键；各分段可安全地使用冒号连接。
  */
 public record CacheKey(String namespace, String tenantId, String resource) {
 

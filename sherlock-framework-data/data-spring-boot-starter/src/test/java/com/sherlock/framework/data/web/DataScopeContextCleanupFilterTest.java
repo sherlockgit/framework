@@ -51,7 +51,7 @@ class DataScopeContextCleanupFilterTest {
     void filterClearsScopeWhenAnInnerFilterShortCircuits() throws Exception {
         filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), (request, response) -> {
             DataScopeContext.set(DataScope.self());
-            // Simulates an inner security filter writing a response and returning without a controller call.
+            // 模拟内部安全过滤器写入响应后直接返回，不再进入控制器。
         });
 
         assertThat(DataScopeContext.current()).isEmpty();

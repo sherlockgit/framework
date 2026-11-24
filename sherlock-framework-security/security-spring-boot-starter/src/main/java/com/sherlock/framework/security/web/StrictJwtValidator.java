@@ -15,7 +15,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Validates the framework's JWT contract independently of the decoder implementation.
+ * 独立于具体解码器实现，校验框架定义的 JWT 契约。
  */
 public final class StrictJwtValidator implements OAuth2TokenValidator<Jwt> {
 
